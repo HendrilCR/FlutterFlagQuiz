@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'dart:convert';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'pontos.dart';
 
 class SecondRoute extends StatefulWidget {
-  const SecondRoute({super.key});
+  final int valor;
+  const SecondRoute({super.key, required this.valor});
 
   @override
   _SecondRouteState createState() => _SecondRouteState();
@@ -17,14 +20,39 @@ class _SecondRouteState extends State<SecondRoute> {
   List<Map<String, String>> _buttonData = [];
   String _flagImagePath = "";
   int _score = 0;
-  Map<String, bool?> _buttonColors = {}; // Mapa para controlar as cores dos botões
+  Map<String, bool?> _buttonColors = {};
   bool _answered = false;
+
+  int _timeLeft = 0;
+  late Timer _timer;
 
   @override
   void initState() {
     super.initState();
     _loadCountries();
     _loadScore();
+    _timeLeft = widget.valor;
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_timeLeft > 0) {
+        setState(() {
+          _timeLeft--;
+        });
+      } else {
+        _timer.cancel();
+        _goToPontosScreen();
+      }
+    });
+  }
+
+  void _goToPontosScreen() {
+    Navigator.pushReplacement(
+      context,
+      CupertinoPageRoute(builder: (context) => PontosRoute(pontos: _score)),
+    );
   }
 
   Future<void> _loadCountries() async {
@@ -51,11 +79,9 @@ class _SecondRouteState extends State<SecondRoute> {
             _buttonData[Random().nextInt(4)] = _correctCountry;
           }
           _buttonData.shuffle();
-          _buttonColors = {for (var country in _buttonData) country['nome']!: null}; // Inicializa as cores
+          _buttonColors = {for (var country in _buttonData) country['nome']!: null};
           _answered = false;
         });
-      } else {
-        print('Estrutura JSON inválida: faltando array "paises"');
       }
     } catch (e) {
       print('Erro ao carregar JSON: $e');
@@ -74,26 +100,23 @@ class _SecondRouteState extends State<SecondRoute> {
     prefs.setInt('score', _score);
   }
 
- void _onButtonPressed(Map<String, String> country) {
-    if (_answered) return; // Impede cliques múltiplos após a resposta
+  void _onButtonPressed(Map<String, String> country) {
+    if (_answered) return;
 
     setState(() {
       _answered = true;
-        _buttonColors.updateAll((key, value) {
-          if (key == _correctCountry['nome']) {
-            return true; // Verde para a correta
-          } else if (key == country['nome'] && key!= _correctCountry['nome']){
-            return false; // Vermelho para as incorretas que foram clicadas
-          }else{
-            return null;
-          }
-        });
+      _buttonColors.updateAll((key, value) {
+        if (key == _correctCountry['nome']) {
+          return true;
+        } else if (key == country['nome'] && key != _correctCountry['nome']) {
+          return false;
+        } else {
+          return null;
+        }
+      });
       if (country['nome'] == _correctCountry['nome']) {
         _score++;
         _saveScore();
-        print('Correto! A bandeira é de ${country['nome']}');
-      } else {
-        print('Errado. Tente novamente!');
       }
     });
 
@@ -102,34 +125,45 @@ class _SecondRouteState extends State<SecondRoute> {
     });
   }
 
-
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        middle: Text('Pontuação: $_score'),
+        middle: Text(
+          'Pontuação: $_score',
+          style: const TextStyle(color: CupertinoColors.white), // Cor branca no texto da barra
+        ),
       ),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Text(
+              'Tempo restante: $_timeLeft Segundos',
+              style: const TextStyle(color: CupertinoColors.white), // Cor branca no texto
+            ),
             if (_flagImagePath.isNotEmpty)
               Image.asset(
                 _flagImagePath,
-                width: 100,
-                height: 60,
+                width: 200,
+                height: 120,
               ),
             if (_buttonData.isNotEmpty) ...[
               for (var country in _buttonData)
-                Padding( // Adiciona um padding para espaçamento entre os botões
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: CupertinoButton(
-                      color: _buttonColors[country['nome']] == true
-                          ? CupertinoColors.activeGreen
-                          : _buttonColors[country['nome']] == false ?CupertinoColors.destructiveRed: null,
-                      onPressed: () => _onButtonPressed(country),
-                      child: Text(country['nome']!),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: CupertinoButton(
+                    color: _buttonColors[country['nome']] == true
+                        ? const Color.fromARGB(255, 52, 199, 108)
+                        : _buttonColors[country['nome']] == false
+                            ? const Color.fromARGB(255, 230, 42, 67)
+                            : null,
+                    onPressed: () => _onButtonPressed(country),
+                    child: Text(
+                      country['nome']!,
+                      style: const TextStyle(color: CupertinoColors.white), // Cor branca no texto do botão
                     ),
+                  ),
                 ),
             ] else
               const CupertinoActivityIndicator(),
@@ -137,5 +171,11 @@ class _SecondRouteState extends State<SecondRoute> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
   }
 }
